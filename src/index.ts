@@ -9,22 +9,35 @@ type Env = {
 const app = new Hono<{ Bindings: Env }>();
 app.use(cors());
 
-app.get('/query', async (c) => {
-    const question = c.req.query('text');
-    if (!question || question.trim().length < 1) return c.text('Escribe una solicitud valida');
+app.post('/', async (c) => {
 
-    const systemPrompt = 'Eres un asistente de conversación que responde a las preguntas de los usuarios en un estilo natural. Responde solo en Español, evita responder dos veces en diferente idioma, solo se requiere el texto en español';
-
-    let aiStream;
+    let body;
     try {
-        aiStream = await c.env.AI.run(
-            "@cf/mistral/mistral-7b-instruct-v0.2-lora",
+        body = await c.req.json();
+    } catch (error) {
+        console.error("Error al parsear el cuerpo de la solicitud:", error);
+        return c.text("Cuerpo de solicitud inválido o vacío", 400);
+    }
+
+    const messages: RoleScopedChatInput[] = body.messages;
+
+    if (!body.messages || messages.length === 0) return c.text("No se han proporcionado mensajes", 400);
+
+    const systemPrompt = 'Eres un asistente de soporte al usuario que responde a las preguntas del usuario en un idioma natural. Solo responde en español.';
+
+    let stream;
+
+    try {
+        stream = await c.env.AI.run(
+            // @ts-ignore
+            "@cf/meta/llama-3.1-70b-instruct",
             {
                 messages: [
                     { role: 'system', content: systemPrompt },
-                    { role: 'user', content: question }
+                    ...messages,
                 ] as RoleScopedChatInput[],
                 stream: true,
+                agreement: "Agreement",
             }
         ) as ReadableStream;
     } catch (error) {
@@ -32,44 +45,12 @@ app.get('/query', async (c) => {
         return c.text("Error al procesar la solicitud", 500);
     }
 
-    const stream = new ReadableStream({
-        async start(controller) {
-            const reader = aiStream.getReader();
-            const decoder = new TextDecoder();
-
-            try {
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-
-                    const chunkText = decoder.decode(value).trim();
-                    if (chunkText.startsWith('data: ')) {
-                        const dataText = chunkText.slice(6);
-                        if (dataText === '[DONE]') break;
-
-                        try {
-                            const parsed = JSON.parse(dataText);
-                            const { response } = parsed;
-
-                            if (response) {
-                                controller.enqueue(new TextEncoder().encode(response));
-                            }
-                        } catch (e) {
-                            console.error("Error al parsear el chunk:", e);
-                        }
-                    }
-                }
-            } catch (e) {
-                console.error("Error al leer el stream:", e);
-            } finally {
-                controller.close();
-            }
-        },
-    });
-
     return new Response(stream, {
-        headers: { 'Content-Type': 'text/event-stream' },
+        headers: {
+            'Content-Type': 'text/event-stream',
+        },
     });
 });
 
 export default app;
+
