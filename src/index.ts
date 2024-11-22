@@ -44,7 +44,6 @@ app.post('/', async (c) => {
 	const vectors = embeddings.data[0];
 
 	const vectorQuery = await c.env.VECTORIZE.query(vectors, { topK: 3 });
-	console.log('matches:', vectorQuery.matches)
 	let vecIds: any[] = [];
 
 	if (vectorQuery?.matches?.length) {
@@ -57,13 +56,10 @@ app.post('/', async (c) => {
 	let notes: any[] = [];
 
 	if (vecIds.length > 0) {
-		console.log(vecIds.length)
 		const placeholders = vecIds.map(() => '?').join(', ');
-		console.log('Placeholders', placeholders);
 		const query = `SELECT * FROM notes WHERE id IN (${placeholders})`;
 		const { results } = await c.env.DB.prepare(query).bind(...vecIds).all();
 		if (results) notes = results.map((vect) => vect.text);
-		console.log(notes.length)
 	}
 
 	const contextMessage = notes.length
@@ -84,6 +80,8 @@ app.post('/', async (c) => {
 			3. No responderás a temas de entretenimiento, noticias externas, ni información personal del usuario o cualquier otra información que no esté relacionada con la universidad.
 			4. Proporciona respuestas directas y seguras basadas en los datos proporcionados.
 			5. Si un usuario pregunta sobre un campus o programa en una ubicación donde la UAD no tiene presencia, informa amablemente que actualmente no hay un campus en esa ubicación y proporciona información sobre dónde se ofrece el programa o campus más cercano.
+			6. Bajo ninguna circunstancia debes inventar detalles numéricos, como precios, fechas, cantidades, u otra información concreta que no esté explícitamente proporcionada. Si no tienes información, indica claramente que no la tienes.
+			7. Bajo ninguna circunstancia debes inventar informacion de campus inexistentes, apegate en todo momento a la informacion proporcionada.
 
 		Estos son los campus de la UAD (Estado: campus):
 			Aguascalientes: Aguascalientes
@@ -100,6 +98,10 @@ app.post('/', async (c) => {
 			México: CDMX, Revolución
 
 		Si un usuario pide información general, pregunta primero de cuál campus en específico está interesado, si el usuario le interesa estudiar en la universidad pero no hay campus en su ciudad ofrecele informacion del campus más cercano.
+
+		Para proporcionar el link de un campus especifico al usuario puedes utilizar la estructura de enlaces que se muestra a continuación:
+		https://www.uad.mx/{estado en minusculas}/campus-{nombre del campus en minusculas}/
+		Ejemplo: https://www.uad.mx/aguascalientes/campus-aguascalientes/
 	`;
 
     let stream;
@@ -115,7 +117,7 @@ app.post('/', async (c) => {
                     ...messages,
                 ],
                 stream: true,
-				temperature: 0.4,
+				temperature: 0.1,
             }
         ) as ReadableStream;
     } catch (error) {
@@ -130,9 +132,6 @@ app.post('/', async (c) => {
     });
 });
 
-// Inserta notas en la base de datos D1
-// Generar embeddings de las notas
-// Insertar las embeddings en vectorizer
 app.post('/notes', async (c) => {
     const { text } = await c.req.json();
 	if (!text) return c.text("Texto no proporcionado", 400);
