@@ -32,7 +32,7 @@ app.post('/', async (c) => {
 
 	const userMessages = messages.filter(msg => msg.role === 'user');
 
-	const lastThreeUserMessages = userMessages.slice(-8);
+	const lastThreeUserMessages = userMessages.slice(-4);
 
 	const combinedText = lastThreeUserMessages.map(msg => msg.content).join(' ');
 	console.log(combinedText)
@@ -43,7 +43,7 @@ app.post('/', async (c) => {
 
 	const vectors = embeddings.data[0];
 
-	const vectorQuery = await c.env.VECTORIZE.query(vectors, { topK: 3 });
+	const vectorQuery = await c.env.VECTORIZE.query(vectors, { topK: 2 });
 	let vecIds: any[] = [];
 
 	if (vectorQuery?.matches?.length) {
@@ -109,7 +109,7 @@ app.post('/', async (c) => {
     try {
         stream = await c.env.AI.run(
             // @ts-ignore
-            "@cf/meta/llama-3.1-70b-instruct",
+            "@cf/meta/llama-3.2-3b-instruct",
             {
                 messages: [
 					...(notes.length ? [{ role: 'assistant', content: contextMessage }] : []),
